@@ -28,19 +28,19 @@ logger = logging.getLogger('luigi-interface')
 class MortarProjectTask(luigi.Task):
     
     # default to a cluster of size 2
-    cluster_size = 2
+    cluster_size = luigi.IntParameter(default=2)
     
     # default to a single-job cluster
-    cluster_type = clusters.CLUSTER_TYPE_SINGLE_JOB
+    cluster_type = luigi.Parameter(default=clusters.CLUSTER_TYPE_SINGLE_JOB)
     
     # run on master by default
-    git_ref = 'master'
+    git_ref = luigi.Parameter(default='master')
     
     # Whether to notify on completion of a job
-    notify_on_job_finish = False
+    notify_on_job_finish = luigi.BooleanParameter(default=False)
     
-    # interval to poll for job status
-    job_polling_interval = 5.0
+    # interval (in seconds) to poll for job status
+    job_polling_interval = luigi.IntParameter(default=5)
         
     @abc.abstractmethod
     def project(self):
