@@ -20,7 +20,9 @@ import urlparse
 from boto.s3.connection import S3Connection
 from boto.s3.bucket import Bucket
 
+from luigi.parameter import Parameter
 from luigi.target import FileSystem, FileSystemTarget
+from luigi.task import ExternalTask
 
 # two different ways of marking a directory
 # with a suffix in S3
@@ -120,3 +122,14 @@ class S3Target(FileSystemTarget):
     
     def open(self, mode='r'):
         raise NotImplementedError('TODO: Implement me')
+
+class S3PathTask(ExternalTask):
+    """
+    A task that to require existence of a path in S3.
+    """
+    path = Parameter()
+        
+    def output(self):
+        return S3Target(self.path)
+
+    
