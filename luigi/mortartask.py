@@ -80,7 +80,7 @@ class MortarProjectTask(luigi.Task):
         job = self._poll_job_completion(api, job_id)
         final_job_status_code = job.get('status_code')
         if final_job_status_code != jobs.STATUS_SUCCESS:
-            raise Exception('Mortar job_id [%s] failed with status_code: [%s], error: ' % (job_id, current_job_status))
+            raise Exception('Mortar job_id [%s] failed with status_code: [%s], error details: %s' % (job_id, final_job_status_code, job.get('error')))
         else:
             logger.info('Mortar job_id [%s] completed successfully' % job_id)
 
