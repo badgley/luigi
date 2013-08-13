@@ -11,15 +11,19 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations under
 # the License.
-
 import configuration
 import itertools
 import logging
+import os.path
+import random
+import tempfile
 import urlparse
 
-from boto.s3.connection import S3Connection
 from boto.s3.bucket import Bucket
+from boto.s3.connection import S3Connection
+from boto.s3.key import Key
 
+from luigi.file import atomic_file
 from luigi.parameter import Parameter
 from luigi.target import FileSystem, FileSystemTarget
 from luigi.task import ExternalTask
@@ -88,6 +92,16 @@ class S3Client(FileSystem):
     def remove(self, path):
         raise NotImplementedError('TODO: Implement me')
     
+    def put(self, local_path, destination):
+        (bucket, key) = self.path_to_bucket_and_key(destination)
+        
+        # grab and validate the bucket
+        s3_bucket = self.s3.get_bucket(bucket, validate=True)
+        
+        s3_key = Key(s3_bucket)
+        s3_key.key = key
+        s3_key.set_contents_from_filename(local_path)
+    
     def path_to_bucket_and_key(self, path):
          (scheme, netloc, path, query, fragment) = urlparse.urlsplit(path)
          return (netloc, 
@@ -98,6 +112,36 @@ class S3Client(FileSystem):
     
     def remove_prepended_slash(self, key):
         return key[1:] if key and key[0] == '/' else path
+
+class atomic_s3_file(file):
+    """
+    Writes to a temp file and then puts it to S3 on close.
+    """
+    def __init__(self, path, s3_client):
+        self.__tmp_path = \
+            os.path.join(tempfile.gettempdir(), 
+                         'luigi-s3-tmp-%09d' % random.randrange(0, 1e10))
+        self.path = path
+        self.path = path
+        self.s3_client = s3_client
+        super(atomic_s3_file, self).__init__(self.__tmp_path, 'w')
+    
+    def close(self):
+        # close the file
+        super(atomic_s3_file, self).close()
+
+        # store the contents in S3
+        self.s3_client.put(self.__tmp_path, self.path)
+    
+    def __del__(self):
+        if os.path.exists(self.__tmp_path):
+            os.remove(self.__tmp_path)
+
+    def __exit__(self, exc_type, exc, traceback):
+        " Close/commit the file if there are no exception "
+        if exc_type:
+            return
+        return file.__exit__(self, exc_type, exc, traceback)
 
 client = S3Client()
 class S3Target(FileSystemTarget):
@@ -114,14 +158,14 @@ class S3Target(FileSystemTarget):
         (scheme, netloc, path, query, fragment) = urlparse.urlsplit(path)
         assert ":" not in path  # colon is not allowed in hdfs filenames
 
-#    TODO: Implement me
-#    def __del__(self):
-#        #TODO: not sure is_tmp belongs in Targets construction arguments
-#        if self.is_tmp and self.exists():
-#            self.remove()
-    
     def open(self, mode='r'):
-        raise NotImplementedError('TODO: Implement me')
+        if mode not in ('r', 'w'):
+            raise ValueError("Unsupported open mode '%s'" % mode)
+
+        if mode == 'r':
+            raise NotImplementedError('TODO: Implement me')
+        else:
+            return atomic_s3_file(self.path, self.fs)
 
 class S3PathTask(ExternalTask):
     """
