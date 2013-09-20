@@ -31,10 +31,10 @@ def setup_interface_logging():
         return
 
     logger = logging.getLogger('luigi-interface')
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel(logging.WARNING)
 
     streamHandler = logging.StreamHandler()
-    streamHandler.setLevel(logging.DEBUG)
+    streamHandler.setLevel(logging.WARNING)
 
     formatter = logging.Formatter('%(levelname)s: %(message)s')
     streamHandler.setFormatter(formatter)
