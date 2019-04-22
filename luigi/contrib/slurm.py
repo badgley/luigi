@@ -114,6 +114,7 @@ class slurm(luigi.Config):
     mem = luigi.IntParameter(default=4000, significant=False)
     gres = luigi.Parameter(default='', significant=False)
     partitions = luigi.ListParameter(default=[], description='randomly assign to one of the given partitions')
+    accounts = luigi.DictParameter(default={}, description='mapping from partition to account name')
     time = luigi.Parameter(default='', significant=False)
     shared_tmp_dir = luigi.Parameter(default='/home', significant=False)
     work_dir = luigi.Parameter(default='', significant=False,
@@ -181,7 +182,7 @@ def _parse_job_state(job_id):
     return job_map.get('JobState', 'u')
 
 
-def _build_submit_command(cmd, job_name, outfile, errfile, ntasks, mem, gres, partition, time, sbatchfile):
+def _build_submit_command(cmd, job_name, outfile, errfile, ntasks, mem, gres, partition, account, time, sbatchfile):
     """Submit shell command to Slurm, queue via `sbatch`"""
     sbatch_template = """#!/bin/bash
     {cmd}"""
@@ -196,6 +197,8 @@ def _build_submit_command(cmd, job_name, outfile, errfile, ntasks, mem, gres, pa
         submit_cmd.extend(['--gres',  '{gres}'])
     if partition != '':
         submit_cmd.extend(['--partition',  '{partition}'])
+    if account != '':
+        submit_cmd.extend(['--account',  '{account}'])
     if time != '':
         submit_cmd.extend(['--time', '{time}'])
     submit_cmd.append('{sbatchfile}')
@@ -206,7 +209,7 @@ def _build_submit_command(cmd, job_name, outfile, errfile, ntasks, mem, gres, pa
 
     return submit_template.format(
         sbatch_template=sbatch_template, job_name=job_name, outfile=outfile, errfile=errfile,
-        ntasks=ntasks, mem=mem, sbatchfile=sbatchfile, gres=gres, partition=partition, time=time)
+        ntasks=ntasks, mem=mem, sbatchfile=sbatchfile, gres=gres, partition=partition, account=account, time=time)
 
 
 @retry()
@@ -285,6 +288,9 @@ class SlurmTask(luigi.Task):
 
         if (not hasattr(self, 'partitions') or len(self.partitions) < 1) and len(self.slurm_config.partitions) > 0:
             self.partitions = self.slurm_config.partitions
+
+        if (not hasattr(self, 'accounts') or len(self.accounts) < 1) and len(self.slurm_config.accounts) > 0:
+            self.accounts = self.slurm_config.accounts
 
     def __str__(self):
         return '\n'.join([
@@ -419,10 +425,11 @@ class SlurmTask(luigi.Task):
         if len(self.partitions) > 0:
             i = random.randrange(len(self.partitions))
             self.partition = self.partitions[i]
+            self.account = self.accounts.get(self.partition) 
 
         submit_cmd = _build_submit_command(job_str, self.task_family, self.outfile,
                                            self.errfile, self.ntasks, self.mem,
-                                           self.gres, self.partition, self.time, sbatchfile)
+                                           self.gres, self.partition, self.account, self.time, sbatchfile)
         logger.debug('sbatch command: {}'.format(submit_cmd))
 
         # Submit the job and grab job ID
